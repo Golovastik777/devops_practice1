@@ -17,68 +17,58 @@
 В файле `lab.yaml` описана топология сети. Она включает маршрутизатор `R1`, три коммутатора (`SW1`, `SW2`, `SW3`), а также два конечных устройства (`PC1` и `PC2`). Каждый узел имеет свой файл конфигурации (в папке `configs`, который загружается при старте контейнера.
 
 ```
-name: enterprise-network
+name: enterprise-lab
 
 mgmt:
   network: static
-  ipv4-subnet: 172.20.20.0/24
+  ipv4-subnet: 192.168.10.0/24
 
 topology:
+  kinds:
+    vr-mikrotik_ros:
+      image: vrnetlab/vr-routeros:6.47.9
+    linux:
+      image: alpine:latest
+
   nodes:
     R1:
-      kind: linux
-      image: alpine:latest
-      mgmt-ipv4: 172.20.20.11
-      startup-config: /configs/r1_linux.sh
-      binds:
-        - ./configs:/configs
-
+      kind: vr-mikrotik_ros
+      mgmt-ipv4: 192.168.10.11
+      startup-config: ./configs/r1.rsc
+      
     SW1:
-      kind: linux
-      image: alpine:latest
-      mgmt-ipv4: 172.20.20.12
-      startup-config: /configs/sw1_linux.sh
-      binds:
-        - ./configs:/configs
-
+      kind: vr-mikrotik_ros
+      mgmt-ipv4: 192.168.10.12
+      startup-config: ./configs/sw1.rsc
+      
     SW2:
-      kind: linux
-      image: alpine:latest
-      mgmt-ipv4: 172.20.20.13
-      startup-config: /configs/sw2_linux.sh
-      binds:
-        - ./configs:/configs
-
+      kind: vr-mikrotik_ros
+      mgmt-ipv4: 192.168.10.13
+      startup-config: ./configs/sw2.rsc
+      
     SW3:
-      kind: linux
-      image: alpine:latest
-      mgmt-ipv4: 172.20.20.14
-      startup-config: /configs/sw3_linux.sh
-      binds:
-        - ./configs:/configs
-
+      kind: vr-mikrotik_ros
+      mgmt-ipv4: 192.168.10.14
+      startup-config: ./configs/sw3.rsc
+      
     PC1:
       kind: linux
-      image: alpine:latest
-      mgmt-ipv4: 172.20.20.15
-      startup-config: /configs/pc1_linux.sh
+      startup-config: /configs/pc1.sh
       binds:
         - ./configs:/configs
-
+        
     PC2:
       kind: linux
-      image: alpine:latest
-      mgmt-ipv4: 172.20.20.16
-      startup-config: /configs/pc2_linux.sh
+      startup-config: /configs/pc2.sh
       binds:
         - ./configs:/configs
 
   links:
-    - endpoints: ["R1:eth1", "SW1:eth1"]
-    - endpoints: ["SW1:eth2", "SW2:eth1"]
-    - endpoints: ["SW1:eth3", "SW3:eth1"]
-    - endpoints: ["SW2:eth2", "PC1:eth1"]
-    - endpoints: ["SW3:eth2", "PC2:eth1"]
+    - endpoints: ["R1:eth2", "SW1:eth2"]
+    - endpoints: ["SW1:eth3", "SW2:eth2"]
+    - endpoints: ["SW1:eth4", "SW3:eth2"]
+    - endpoints: ["SW2:eth3", "PC1:eth2"]
+    - endpoints: ["SW3:eth3", "PC2:eth2"]
 
 ```
 
@@ -90,18 +80,32 @@ topology:
 
 Команды для настройки `R1`:
 ```
-#!/bin/sh
-sleep 10
-ip link set dev eth1 up
-ip link add link eth1 name eth1.10 type vlan id 10
-ip link add link eth1 name eth1.20 type vlan id 20
-ip link set dev eth1.10 up
-ip link set dev eth1.20 up
-ip addr add 10.10.10.1/24 dev eth1.10
-ip addr add 10.10.20.1/24 dev eth1.20
-echo 1 > /proc/sys/net/ipv4/ip_forward
-echo "R1 configured with VLANs 10 and 20"
-tail -f /dev/null
+/system identity set name=R1-Enterprise
+/user set admin password=Admin123456
+/user add name=netadmin password=NetAdmin123 group=full
+
+/interface vlan
+add name=vlan10 vlan-id=10 interface=ether2
+add name=vlan20 vlan-id=20 interface=ether2
+
+/ip address
+add address=10.10.10.1/24 interface=vlan10
+add address=10.10.20.1/24 interface=vlan20
+
+/ip pool
+add name=dhcp_vlan10 ranges=10.10.10.100-10.10.10.200
+add name=dhcp_vlan20 ranges=10.10.20.100-10.10.20.200
+
+/ip dhcp-server
+add name=dhcp10 interface=vlan10 address-pool=dhcp_vlan10 disabled=no
+add name=dhcp20 interface=vlan20 address-pool=dhcp_vlan20 disabled=no
+
+/ip dhcp-server network
+add address=10.10.10.0/24 gateway=10.10.10.1 dns-server=8.8.8.8
+add address=10.10.20.0/24 gateway=10.10.20.1 dns-server=8.8.8.8
+
+/ip firewall filter
+add chain=forward action=accept
 
 ```
 
@@ -114,18 +118,34 @@ tail -f /dev/null
 
 Команды для настройки `SW1`:
 ```
-#!/bin/sh
-sleep 10
-ip link set dev eth1 up
-ip link set dev eth2 up
-ip link set dev eth3 up
-ip link add name br0 type bridge
-ip link set dev br0 up
-ip link set dev eth1 master br0
-ip link set dev eth2 master br0
-ip link set dev eth3 master br0
-echo "SW1 bridge configured"
-tail -f /dev/null
+/system identity set name=SW1-Core
+
+/user set admin password=Admin123456
+/user add name=netadmin password=NetAdmin123 group=full
+
+# Настройка trunk порта к R1
+/interface ethernet
+set ether2 name=trunk-to-R1
+
+/interface vlan
+add name=vlan10-trunk vlan-id=10 interface=trunk-to-R1
+add name=vlan20-trunk vlan-id=20 interface=trunk-to-R1
+
+/interface vlan
+add name=vlan10-access vlan-id=10 interface=ether3
+add name=vlan20-access vlan-id=20 interface=ether4
+
+/interface bridge
+add name=bridge-vlan10
+/interface bridge port
+add interface=vlan10-trunk bridge=bridge-vlan10
+add interface=vlan10-access bridge=bridge-vlan10
+
+/interface bridge
+add name=bridge-vlan20
+/interface bridge port
+add interface=vlan20-trunk bridge=bridge-vlan20
+add interface=vlan20-access bridge=bridge-vlan20
 
 ```
 
@@ -148,28 +168,36 @@ tail -f /dev/null
 
 ```
 #!/bin/sh
-sleep 10
-ip link set dev eth1 up
-ip link add link eth1 name eth1.10 type vlan id 10
-ip link set dev eth1.10 up
-ip addr add 10.10.10.100/24 dev eth1.10
-ip route add default via 10.10.10.1
-echo "PC1 configured in VLAN 10"
-tail -f /dev/null
+sleep 15
+
+ip link add link eth2 name vlan10 type vlan id 10
+ip link set vlan10 up
+
+udhcpc -i vlan10 -t 5 -n -q
+
+echo "PC1 (VLAN 10) настроен"
+echo "IP адрес:"
+ip addr show vlan10 | grep "inet "
+
+while true; do sleep 3600; done
 
 ```
 
 Пример настройки `PC2`:
 ```
 #!/bin/sh
-sleep 10
-ip link set dev eth1 up
-ip link add link eth1 name eth1.20 type vlan id 20
-ip link set dev eth1.20 up
-ip addr add 10.10.20.100/24 dev eth1.20
-ip route add default via 10.10.20.1
-echo "PC2 configured in VLAN 20 with IP 10.10.20.100/24"
-tail -f /dev/null
+sleep 15
+
+ip link add link eth2 name vlan20 type vlan id 20
+ip link set vlan20 up
+
+udhcpc -i vlan20 -t 5 -n -q
+
+echo "PC2 (VLAN 20) настроен"
+echo "IP адрес:"
+ip addr show vlan20 | grep "inet "
+
+while true; do sleep 3600; done
 ```
 
 ### Пример работы
