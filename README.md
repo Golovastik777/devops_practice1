@@ -179,16 +179,11 @@ while true; do sleep 3600; done
 Пример настройки `PC2`:
 ```
 #!/bin/sh
-sleep 15
 
 ip link add link eth2 name vlan20 type vlan id 20
 ip link set vlan20 up
 
 udhcpc -i vlan20 -t 5 -n -q
-
-echo "PC2 (VLAN 20) настроен"
-echo "IP адрес:"
-ip addr show vlan20 | grep "inet "
 
 while true; do sleep 3600; done
 ```
