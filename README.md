@@ -25,19 +25,19 @@ mgmt:
 
 topology:
   kinds:
-    vr-mikrotik_ros:
+    vr-ros:
       image: vrnetlab/vr-routeros:6.47.9
     linux:
       image: alpine:latest
 
   nodes:
     R1:
-      kind: vr-mikrotik_ros
+      kind: vr-ros
       mgmt-ipv4: 192.168.10.11
       startup-config: ./configs/r1.rsc
       
     SW1:
-      kind: vr-mikrotik_ros
+      kind: vr-ros
       mgmt-ipv4: 192.168.10.12
       startup-config: ./configs/sw1.rsc
       
@@ -47,7 +47,7 @@ topology:
       startup-config: ./configs/sw2.rsc
       
     SW3:
-      kind: vr-mikrotik_ros
+      kind: vr-ros
       mgmt-ipv4: 192.168.10.14
       startup-config: ./configs/sw3.rsc
       
