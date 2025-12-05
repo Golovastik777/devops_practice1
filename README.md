@@ -80,9 +80,6 @@ topology:
 
 Команды для настройки `R1`:
 ```
-/system identity set name=R1-Enterprise
-/user set admin password=Admin123456
-/user add name=netadmin password=NetAdmin123 group=full
 
 /interface vlan
 add name=vlan10 vlan-id=10 interface=ether2
@@ -118,10 +115,6 @@ add chain=forward action=accept
 
 Команды для настройки `SW1`:
 ```
-/system identity set name=SW1-Core
-
-/user set admin password=Admin123456
-/user add name=netadmin password=NetAdmin123 group=full
 
 # Настройка trunk порта к R1
 /interface ethernet
